@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Staff login{% endblock %}
+{% block body %}
+<div style="max-width:420px;margin:0 auto">
+  <h1>Staff login</h1>
+  <p class="muted small">Attendance keeps recording whether or not anyone is logged in.</p>
+
+  {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/login" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="u">Username</label>
+    <input id="u" name="username" autocomplete="username" autocapitalize="none" required>
+    <label for="p">Password</label>
+    <input id="p" name="password" type="password" autocomplete="current-password" required>
+    <label for="t">6-digit code <span class="muted">(only if 2FA is on)</span></label>
+    <input id="t" name="totp" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
+    <div style="margin-top:1rem"><button class="btn primary block lg">Sign in</button></div>
+  </form>
+
+  {% if local %}
+  <form method="post" action="/login/pin" class="card">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <h3>Quick unlock on this screen</h3>
+    <label for="pin">Admin PIN</label>
+    <input id="pin" name="pin" type="password" inputmode="numeric" required>
+    <div style="margin-top:.8rem"><button class="btn block lg">Unlock</button></div>
+    <p class="small muted" style="margin:.7rem 0 0">
+      PIN unlock only works on the Pi itself, never over the network.
+    </p>
+  </form>
+  {% endif %}
+
+  <p style="text-align:center"><a href="/">Back to the kiosk screen</a></p>
+</div>
+{% endblock %}

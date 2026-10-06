@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block body %}
+<h1>Reports</h1>
+
+<form method="get" action="/admin/reports" class="card">
+  <div class="row">
+    <div>
+      <label for="s">From</label>
+      <input id="s" type="date" name="start" value="{{ start }}">
+    </div>
+    <div>
+      <label for="e">To</label>
+      <input id="e" type="date" name="end" value="{{ end }}">
+    </div>
+    <div>
+      <label for="p">Person</label>
+      <select id="p" name="person_id">
+        <option value="">Everyone</option>
+        {% for p in people %}
+        <option value="{{ p.id }}" {{ 'selected' if person_id == p.id|string }}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn primary">Run</button>
+  </div>
+</form>
+
+<div class="grid four" style="margin-bottom:.75rem">
+  <div class="stat">     <div class="n">{{ totals.rows }}</div> <div class="k">Records</div></div>
+  <div class="stat warn"><div class="n">{{ totals.late }}</div> <div class="k">Late</div></div>
+  <div class="stat">     <div class="n">{{ totals.half }}</div> <div class="k">Half days</div></div>
+  <div class="stat ok">  <div class="n">{{ totals.hours }}</div><div class="k">Hours</div></div>
+</div>
+
+<div class="row" style="margin-bottom:.75rem">
+  <a class="btn primary block lg"
+     href="/admin/export.csv?start={{ start }}&amp;end={{ end }}&amp;person_id={{ person_id }}">
+    Download CSV
+  </a>
+</div>
+
+<div class="card">
+  <div class="scroll">
+    <table>
+      <tr><th>Day</th><th>Name</th><th>In</th><th>Out</th><th>Status</th><th class="right">Hrs</th></tr>
+      {% for r in rows %}
+      <tr>
+        <td class="mono small">{{ r.day }}</td>
+        <td>{{ r.name }}</td>
+        <td class="mono">{{ r.check_in[11:16] if r.check_in else '-' }}</td>
+        <td class="mono">{{ r.check_out[11:16] if r.check_out else '-' }}</td>
+        <td><span class="pill {{ r.status }}">{{ status_label[r.status] }}</span>
+            {% if r.half_day %}<span class="pill half_day">Half</span>{% endif %}
+            {% if r.corrected %}<div class="small muted">edited</div>{% endif %}</td>
+        <td class="right mono">{{ '%.1f'|format((r.minutes or 0) / 60) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">No records in this range</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

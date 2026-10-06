@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block body %}
+<h1>People</h1>
+
+<form method="get" action="/admin/people" class="row" style="margin-bottom:.75rem">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="name, code or department">
+  </div>
+  <button class="btn primary">Find</button>
+  {% if user.r in ('hr','admin') %}
+  <a class="btn" href="/admin/register">Add new</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  <div class="scroll">
+    <table>
+      <tr><th>Name</th><th>Dept</th><th class="right">Faces</th><th>Last seen</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>
+          <a href="/admin/people/{{ r.id }}"><strong>{{ r.name }}</strong></a>
+          {% if r.emp_code %}<div class="small muted">{{ r.emp_code }}</div>{% endif %}
+        </td>
+        <td class="small">{{ r.department or '-' }}</td>
+        <td class="right mono">{{ r.templates }}</td>
+        <td class="small mono">{{ r.last_seen[:16] if r.last_seen else 'never' }}</td>
+        <td>
+          {% if not r.active %}<span class="pill absent">Inactive</span>
+          {% elif r.templates == 0 %}<span class="pill late">No face</span>{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">Nobody registered yet</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

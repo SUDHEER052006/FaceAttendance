@@ -1,0 +1,9 @@
+.venv/
+models/*.onnx
+models/*.zip
+models/_tmp/
+data/
+*.pyc
+__pycache__/
+.installed
+*.log

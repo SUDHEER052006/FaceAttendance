@@ -1,0 +1,80 @@
+# ============================================================
+#  Face Attendance - single-box Raspberry Pi 5 configuration
+#  Everything tunable lives here. Edit, then: sudo systemctl
+#  restart fa-recognizer fa-web   (or just re-run ./run.sh)
+# ============================================================
+
+site:
+  name: "Main Gate"
+  timezone: "Asia/Kolkata"
+
+camera:
+  source: picamera2         # picamera2 (on Pi) | opencv (laptop/USB webcam testing)
+  opencv_index: 0
+  lores: [640, 480]         # detection stream - keep small, this is the hot path
+  main: [1536, 864]         # crop stream - faces are cut from here for embedding
+  hflip: false
+  vflip: false
+  roi: null                 # [x, y, w, h] in lores pixels. null = whole frame.
+  idle_fps: 5               # when nothing is moving
+  active_fps: 15            # when motion is detected
+
+detect:
+  model: models/face_detection_yunet_2023mar.onnx
+  score_threshold: 0.75
+  nms_threshold: 0.3
+  top_k: 20
+  min_face_px: 70           # faces smaller than this (in lores px) are ignored
+
+embed:
+  model: models/w600k_mbf.onnx
+  threads: 2                # ONNX Runtime intra-op threads. Leave at 2 on a Pi 5.
+
+match:
+  threshold: 0.40           # cosine similarity. TUNE THIS with scripts/tune_threshold.py
+  margin: 0.05              # best match must beat runner-up by this much
+  votes_required: 4         # agreeing frames before an attendance event is written
+  vote_window: 10           # out of this many recent frames on the same track
+
+quality:
+  min_blur: 55.0            # Laplacian variance on the aligned crop
+  min_brightness: 45
+  max_brightness: 215
+  max_yaw_ratio: 0.38       # nose offset from eye-midpoint / eye-distance
+
+liveness:
+  enabled: true
+  model: models/minifasnet.onnx   # optional. Heuristic engine is used if absent.
+  threshold: 0.55
+
+motion:
+  enabled: true             # the single biggest 24/7 CPU saver - keep it on
+  threshold: 2.2            # mean abs frame diff to count as motion
+  cooldown_s: 6             # stay in active mode this long after last motion
+
+attendance:
+  min_rescan_gap_s: 120     # ignore the same person again within this window
+  shift_start: "09:00"
+  shift_end: "18:00"
+  grace_minutes: 10         # arrive within this after shift_start = still on time
+  half_day_minutes: 240     # worked less than this = half day
+
+tracker:
+  iou_threshold: 0.3
+  max_age: 12               # frames a track survives without a detection
+
+web:
+  host: 0.0.0.0
+  port: 8000
+  admin_pin: "1234"         # quick unlock on the touchscreen. CHANGE THIS.
+  session_days: 7
+
+paths:
+  db: data/attendance.db
+  frame: /dev/shm/fa_frame.jpg
+  unknowns: data/unknowns
+  faces: data/faces
+
+retention:
+  unknown_days: 14          # unknown-visitor snapshots auto-purge after this
+  event_days: 400

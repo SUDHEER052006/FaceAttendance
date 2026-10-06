@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block body %}
+<h1>Register a new face</h1>
+<p class="muted small">
+  The camera captures several angles automatically. Stand 50-80 cm away in even light.
+</p>
+
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+
+<form method="post" action="/admin/register" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <label for="name">Full name</label>
+  <input id="name" name="name" required autocapitalize="words">
+
+  <div class="row">
+    <div>
+      <label for="code">Employee code</label>
+      <input id="code" name="emp_code" autocapitalize="characters">
+    </div>
+    <div>
+      <label for="dept">Department</label>
+      <input id="dept" name="department">
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" inputmode="tel">
+    </div>
+    <div>
+      <label for="samples">Angles to capture</label>
+      <select id="samples" name="samples">
+        <option value="5">5 - quick</option>
+        <option value="7" selected>7 - recommended</option>
+        <option value="10">10 - best accuracy</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="check">
+    <input type="checkbox" id="consent" name="consent" value="1" required>
+    <span>
+      <strong>Biometric consent recorded.</strong>
+      This person has been told that their facial template is stored for
+      attendance, and that they can ask for it to be deleted at any time.
+      Required under the DPDP Act.
+    </span>
+  </div>
+
+  <button class="btn primary block lg">Start face capture</button>
+</form>
+{% endblock %}

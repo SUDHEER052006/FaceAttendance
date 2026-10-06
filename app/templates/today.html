@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Today{% endblock %}
+{% block body %}
+<h1>Attendance</h1>
+
+<form method="get" action="/admin/today" class="row" style="margin-bottom:.75rem">
+  <div>
+    <label for="day">Date</label>
+    <input id="day" type="date" name="day" value="{{ day }}">
+  </div>
+  <button class="btn primary">Show</button>
+</form>
+
+<div class="grid four" style="margin-bottom:.75rem">
+  <div class="stat ok">  <div class="n">{{ summary.present }}</div><div class="k">Present</div></div>
+  <div class="stat warn"><div class="n">{{ summary.late }}</div>   <div class="k">Late</div></div>
+  <div class="stat">     <div class="n">{{ summary.half_day }}</div><div class="k">Half day</div></div>
+  <div class="stat bad"> <div class="n">{{ summary.absent }}</div> <div class="k">Absent</div></div>
+</div>
+
+<div class="card">
+  <div class="scroll">
+    <table>
+      <tr><th>Name</th><th>In</th><th>Out</th><th>Status</th><th class="right">Hrs</th>
+          {% if user.r in ('hr','admin') %}<th></th>{% endif %}</tr>
+      {% for r in rows %}
+      <tr>
+        <td>
+          <a href="/admin/people/{{ r.person_id }}"><strong>{{ r.name }}</strong></a>
+          {% if r.emp_code %}<div class="small muted">{{ r.emp_code }}</div>{% endif %}
+        </td>
+        <td class="mono">{{ r.check_in[11:16] if r.check_in else '-' }}</td>
+        <td class="mono">{{ r.check_out[11:16] if r.check_out else '-' }}</td>
+        <td>
+          <span class="pill {{ r.status }}">{{ status_label[r.status] }}</span>
+          {% if r.half_day %}<span class="pill half_day">Half</span>{% endif %}
+          {% if r.corrected %}<div class="small muted">edited</div>{% endif %}
+        </td>
+        <td class="right mono">{{ '%.1f'|format((r.minutes or 0) / 60) }}</td>
+        {% if user.r in ('hr','admin') %}
+        <td>
+          {% if r.att_id %}
+          <details>
+            <summary class="small">Fix</summary>
+            <form method="post" action="/admin/attendance/{{ r.att_id }}/correct">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <label>Check in</label>
+              <input name="check_in" value="{{ r.check_in or '' }}" placeholder="{{ day }} 09:00:00">
+              <label>Check out</label>
+              <input name="check_out" value="{{ r.check_out or '' }}" placeholder="{{ day }} 18:00:00">
+              <label>Reason (recorded in the audit log)</label>
+              <input name="note" value="{{ r.note or '' }}" required>
+              <div style="margin-top:.6rem"><button class="btn primary block">Save correction</button></div>
+            </form>
+          </details>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">Nobody is enrolled yet</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

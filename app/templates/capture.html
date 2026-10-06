@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Capturing{% endblock %}
+{% block bodyattr %} data-enroll="{{ cmd_id }}"{% endblock %}
+{% block body %}
+<h1>Capturing face</h1>
+
+<div class="capture-wrap">
+  <div>
+    <img src="/stream.mjpg" alt="Live camera">
+  </div>
+
+  <div>
+    <div class="card">
+      <h3>Progress <span class="mono right" id="pct" style="float:right">0%</span></h3>
+      <div class="progress"><div id="bar"></div></div>
+      <p class="hint" id="hint" style="margin:.8rem 0 0">Waiting for the camera...</p>
+    </div>
+
+    <div class="flash err" id="err" style="display:none"></div>
+
+    <div class="card">
+      <h3>How to get a clean enrollment</h3>
+      <ul style="margin:0;padding-left:1.2rem;line-height:1.7">
+        <li>Face the camera, then slowly look slightly left, right, up, down</li>
+        <li>Only one person in frame</li>
+        <li>No backlight - a window behind you ruins it</li>
+        <li>Remove sunglasses and masks; normal glasses are fine</li>
+      </ul>
+    </div>
+
+    <div class="row" id="done-actions" style="display:none">
+      <a class="btn primary block lg" href="/admin/register">Register another</a>
+      <a class="btn block lg" href="/admin/people">View people</a>
+    </div>
+
+    <div class="row" id="retry-actions" style="display:none">
+      <a class="btn block lg" href="/admin/people">Go to people</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

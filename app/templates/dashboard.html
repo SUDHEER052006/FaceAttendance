@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block body %}
+<h1>Today at a glance</h1>
+<p class="muted small">{{ summary.day }}</p>
+
+<div class="grid four" style="margin-bottom:.75rem">
+  <div class="stat ok">  <div class="n">{{ summary.present }}</div><div class="k">Present</div></div>
+  <div class="stat bad"> <div class="n">{{ summary.absent }}</div> <div class="k">Absent</div></div>
+  <div class="stat warn"><div class="n">{{ summary.late }}</div>   <div class="k">Late</div></div>
+  <div class="stat">     <div class="n">{{ summary.percent }}%</div><div class="k">Turnout</div></div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <h3>Recognizer</h3>
+    {% if health.ts %}
+      <p style="margin:.2rem 0 .6rem">
+        <span class="pill {{ 'up' if health.state else 'down' }}">{{ health.state or 'unknown' }}</span>
+        <span class="mono muted small">{{ health.fps }} fps &middot; {{ health.cpu_temp }}&deg;C</span>
+      </p>
+      <p class="small muted" style="margin:0">Last heartbeat {{ health.ts }}</p>
+    {% else %}
+      <p class="muted">No heartbeat yet. Is <span class="mono">fa-recognizer</span> running?</p>
+    {% endif %}
+    <div style="margin-top:.7rem"><a class="btn block" href="/admin/health">Device health</a></div>
+  </div>
+
+  <div class="card">
+    <h3>Enrolled</h3>
+    <p style="margin:.2rem 0"><strong style="font-size:1.6rem">{{ counts.people }}</strong> people
+      <span class="muted small">&middot; {{ counts.templates }} face templates</span></p>
+    {% if counts.unknowns %}
+      <p style="margin:.4rem 0"><a href="/admin/unknowns">{{ counts.unknowns }} unknown faces waiting for review</a></p>
+    {% endif %}
+    <div style="margin-top:.7rem"><a class="btn primary block" href="/admin/register">Register someone</a></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Latest recognitions</h3>
+  <div class="scroll">
+    <table>
+      <tr><th></th><th>Name</th><th>Time</th><th class="right">Score</th><th class="right">Live</th></tr>
+      {% for e in events %}
+      <tr>
+        <td>{% if e.thumb %}<img class="thumb" src="/media/{{ e.thumb }}" alt="">{% endif %}</td>
+        <td><strong>{{ e.name }}</strong></td>
+        <td class="mono">{{ e.ts[11:19] }}</td>
+        <td class="right mono">{{ '%.2f'|format(e.score or 0) }}</td>
+        <td class="right mono">{{ '%.2f'|format(e.liveness) if e.liveness is not none else '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">Nothing recognised yet</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

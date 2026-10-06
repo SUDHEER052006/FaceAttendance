@@ -1,0 +1,8 @@
+# Shell scripts, systemd units and config MUST stay LF or they break on the Pi.
+* text=auto eol=lf
+*.sh      text eol=lf
+*.service text eol=lf
+*.yaml    text eol=lf
+*.py      text eol=lf
+*.onnx    binary
+*.jpg     binary

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ person.name }}{% endblock %}
+{% block body %}
+<h1>{{ person.name }}</h1>
+<p class="muted small">
+  {{ person.emp_code or 'no code' }} &middot; {{ person.department or 'no department' }}
+  {% if not person.active %}&middot; <span class="pill absent">Inactive</span>{% endif %}
+</p>
+
+<div class="grid two">
+  <div class="card">
+    <h3>Face templates ({{ templates_|length }})</h3>
+    {% if templates_ %}
+    <div class="gallery">
+      {% for t in templates_ %}
+        <img src="/media/faces/{{ person.id }}/{{ t.pose }}_{{ loop.index }}.jpg" alt="{{ t.pose }}"
+             title="{{ t.pose }} &middot; sharpness {{ '%.0f'|format(t.quality or 0) }}">
+      {% endfor %}
+    </div>
+    <p class="small muted" style="margin:.6rem 0 0">
+      Poses captured: {{ templates_|map(attribute='pose')|unique|join(', ') }}
+    </p>
+    {% else %}
+      <p class="muted">No face enrolled yet &mdash; this person cannot be recognised.</p>
+    {% endif %}
+
+    {% if user.r in ('hr','admin') %}
+    <form method="post" action="/admin/people/{{ person.id }}/reenroll" style="margin-top:.8rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="row">
+        <div>
+          <label for="s">Angles</label>
+          <select id="s" name="samples">
+            <option value="5">5</option><option value="7" selected>7</option><option value="10">10</option>
+          </select>
+        </div>
+        <button class="btn primary">Re-capture</button>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="rep" name="replace" value="1">
+        <span>Delete the existing templates first (use this if recognition has become unreliable)</span>
+      </div>
+    </form>
+
+    <details style="margin-top:.4rem">
+      <summary class="small">Enroll from photos instead</summary>
+      <form method="post" action="/admin/people/{{ person.id }}/photos" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label for="f">Clear, front-facing photos</label>
+        <input id="f" type="file" name="files" accept="image/*" multiple required>
+        <div style="margin-top:.6rem"><button class="btn block">Upload and enroll</button></div>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Last 30 days</h3>
+    <div class="scroll">
+      <table>
+        <tr><th>Day</th><th>In</th><th>Out</th><th>Status</th></tr>
+        {% for h in history %}
+        <tr>
+          <td class="mono small">{{ h.day }}</td>
+          <td class="mono">{{ h.check_in[11:16] if h.check_in else '-' }}</td>
+          <td class="mono">{{ h.check_out[11:16] if h.check_out else '-' }}</td>
+          <td><span class="pill {{ h.status }}">{{ status_label[h.status] }}</span>
+              {% if h.half_day %}<span class="pill half_day">Half</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">No records</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if user.r in ('hr','admin') %}
+<div class="card">
+  <h3>Administration</h3>
+  <form method="post" action="/admin/people/{{ person.id }}/active" style="margin-bottom:.8rem">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn block">{{ 'Reactivate' if not person.active else 'Mark inactive (stops recognition, keeps records)' }}</button>
+  </form>
+
+  {% if user.r == 'admin' %}
+  <details>
+    <summary class="small" style="color:#ffb4b4">Delete biometric data (DPDP erasure)</summary>
+    <p class="small muted">
+      Destroys every face template and stored face image for this person and
+      removes them from the index. Attendance history is preserved for
+      headcount, but they can never be recognised again without re-enrolling.
+      Irreversible, and written to the audit log.
+    </p>
+    <form method="post" action="/admin/people/{{ person.id }}/delete"
+          data-confirm="Permanently delete all biometric data for {{ person.name }}?">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="cf">Type the full name to confirm</label>
+      <input id="cf" name="confirm" required placeholder="{{ person.name }}">
+      <div style="margin-top:.6rem"><button class="btn danger block">Delete biometric data</button></div>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

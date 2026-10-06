@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ site }} &middot; Attendance</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="kiosk">
+
+<div class="kiosk-wrap">
+
+  <div class="kiosk-video">
+    <img src="/stream.mjpg" alt="Live camera">
+    <div class="tag" id="status-badge">LIVE</div>
+  </div>
+
+  <div class="kiosk-side">
+    <div>
+      <div class="kiosk-clock" id="clock">--:--</div>
+      <div class="kiosk-date" id="date"></div>
+    </div>
+
+    <div class="kiosk-counts">
+      <div class="stat ok">  <div class="n" id="c-present">{{ summary.present }}</div><div class="k">In</div></div>
+      <div class="stat warn"><div class="n" id="c-late">{{ summary.late }}</div>   <div class="k">Late</div></div>
+      <div class="stat bad"> <div class="n" id="c-absent">{{ summary.absent }}</div><div class="k">Out</div></div>
+    </div>
+
+    <div class="feed" id="feed">
+      {% for e in events %}
+      <div class="ev">
+        {% if e.thumb %}<img src="/media/{{ e.thumb }}" alt="">{% else %}<img alt="">{% endif %}
+        <div>
+          <div class="nm">{{ e.name }}</div>
+          <div class="tm">{{ e.ts[11:16] }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty">No activity yet today</div>
+      {% endfor %}
+    </div>
+
+    <div class="kiosk-foot">
+      <a class="btn" href="/login">Staff login</a>
+    </div>
+  </div>
+</div>
+
+<!-- Fullscreen greeting that flashes when somebody is recognised. The whole
+     reason the 7" screen is there: instant, unambiguous feedback. -->
+<div id="greeting">
+  <div class="big" id="greet-name">Welcome</div>
+  <div class="sub" id="greet-sub"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

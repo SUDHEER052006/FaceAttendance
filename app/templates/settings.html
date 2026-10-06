@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<h1>Settings</h1>
+{% if saved %}<div class="flash ok">Saved. The recognizer picked up the change.</div>{% endif %}
+
+<form method="post" action="/admin/settings">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <div class="card">
+    <h3>Site</h3>
+    <label for="sn">Display name (shown on the kiosk screen)</label>
+    <input id="sn" name="site_name" value="{{ cfg.site.name }}" required>
+  </div>
+
+  <div class="card">
+    <h3>Recognition</h3>
+    <label for="th">Match threshold &mdash; {{ cfg.match.threshold }}</label>
+    <input id="th" name="threshold" type="number" step="0.01" min="0.20" max="0.80"
+           value="{{ cfg.match.threshold }}" required>
+    <p class="small muted">
+      Higher = stricter (fewer false matches, more misses). Lower = looser.
+      Do not guess: run <span class="mono">scripts/tune_threshold.py</span> once you
+      have real faces enrolled, and use the number it recommends.
+    </p>
+
+    <label for="vt">Agreeing frames before an event is recorded</label>
+    <input id="vt" name="votes" type="number" min="1" max="20"
+           value="{{ cfg.match.votes_required }}" required>
+    <p class="small muted">
+      Raise this if you see occasional wrong names; lower it if recognition
+      feels slow at the door.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Shift policy</h3>
+    <div class="row">
+      <div>
+        <label for="ss">Shift start</label>
+        <input id="ss" name="shift_start" value="{{ cfg.attendance.shift_start }}" required>
+      </div>
+      <div>
+        <label for="se">Shift end</label>
+        <input id="se" name="shift_end" value="{{ cfg.attendance.shift_end }}" required>
+      </div>
+      <div>
+        <label for="gr">Grace (minutes)</label>
+        <input id="gr" name="grace" type="number" min="0" max="120"
+               value="{{ cfg.attendance.grace_minutes }}" required>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Anti-spoofing</h3>
+    <div class="check">
+      <input type="checkbox" id="lv" name="liveness_on" value="1"
+             {{ 'checked' if cfg.liveness.enabled }}>
+      <span>Reject photos and phone-screen replays</span>
+    </div>
+    <label for="lt">Liveness threshold</label>
+    <input id="lt" name="liveness_threshold" type="number" step="0.01" min="0" max="1"
+           value="{{ cfg.liveness.threshold }}" required>
+    <p class="small muted">
+      If no ONNX model is installed, the heuristic engine is used. See the README
+      section "Adding a liveness model" &mdash; the trained model is a large
+      accuracy upgrade and worth the ten minutes.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>Performance</h3>
+    <div class="check">
+      <input type="checkbox" id="mo" name="motion_on" value="1"
+             {{ 'checked' if cfg.motion.enabled }}>
+      <span>Skip all inference when nothing is moving (strongly recommended for 24/7)</span>
+    </div>
+    <label for="roi">Detection region &mdash; x, y, width, height in 640x480 pixels</label>
+    <input id="roi" name="roi" placeholder="leave blank for the whole frame"
+           value="{{ cfg.camera.roi|join(', ') if cfg.camera.roi else '' }}">
+    <p class="small muted">
+      Cropping to just the doorway is often a 3-4x speedup. Watch the kiosk
+      preview to see the box you have set.
+    </p>
+  </div>
+
+  <button class="btn primary block lg">Save settings</button>
+</form>
+
+<div class="card" style="margin-top:.75rem">
+  <h3>Not editable here</h3>
+  <p class="small muted" style="margin:0">
+    Camera resolution, frame rates, quality gates and retention live in
+    <span class="mono">config.yaml</span> on the Pi. Edit the file and restart
+    with <span class="mono">sudo systemctl restart fa-recognizer</span>.
+  </p>
+</div>
+{% endblock %}

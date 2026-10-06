@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Health{% endblock %}
+{% block body %}
+<h1>Device health</h1>
+
+{% if not up %}
+<div class="flash err">
+  The recognizer is not reporting. Nothing is being recorded right now.<br>
+  <span class="small mono">sudo systemctl status fa-recognizer</span>
+</div>
+{% endif %}
+
+<div class="grid four" style="margin-bottom:.75rem">
+  <div class="stat {{ 'ok' if up else 'bad' }}">
+    <div class="n" style="font-size:1.3rem">{{ 'RUNNING' if up else 'DOWN' }}</div>
+    <div class="k">Recognizer</div>
+  </div>
+  <div class="stat {{ 'bad' if (health.cpu_temp or 0) > 78 else 'ok' }}">
+    <div class="n">{{ health.cpu_temp or '-' }}</div><div class="k">CPU &deg;C</div>
+  </div>
+  <div class="stat"><div class="n">{{ health.fps or '-' }}</div><div class="k">FPS</div></div>
+  <div class="stat"><div class="n">{{ health.state or '-' }}</div><div class="k">Mode</div></div>
+</div>
+
+<div class="card">
+  <h3>Detail</h3>
+  <table>
+    <tr><th>Last heartbeat</th><td class="mono">{{ health.ts or 'never' }}</td></tr>
+    <tr><th>Uptime</th><td class="mono">{{ '%.1f'|format((health.uptime_s or 0) / 3600) }} h</td></tr>
+    <tr><th>Faces tracked</th><td class="mono">{{ health.faces if health.faces is not none else '-' }}</td></tr>
+    <tr><th>Load (1 min)</th><td class="mono">{{ health.load1 or '-' }}</td></tr>
+    <tr><th>Disk free</th><td class="mono">
+      {{ '%.1f GB'|format((health.disk_free or 0) / 1073741824) }}</td></tr>
+    <tr><th>Engine</th><td class="mono small">{{ health.detail or '-' }}</td></tr>
+  </table>
+  <p class="small muted" style="margin:.8rem 0 0">
+    CPU above 78&deg;C means the Pi is about to throttle and your FPS will drop.
+    Check that the Active Cooler is spinning and the vents are clear.
+  </p>
+</div>
+
+<div class="card">
+  <h3>Audit log (latest 40)</h3>
+  <div class="scroll">
+    <table>
+      <tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr>
+      {% for a in audit %}
+      <tr>
+        <td class="mono small">{{ a.ts }}</td>
+        <td class="small">{{ a.actor or '-' }}</td>
+        <td class="small mono">{{ a.action }}</td>
+        <td class="small muted">{{ a.detail or a.target or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">Nothing logged yet</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

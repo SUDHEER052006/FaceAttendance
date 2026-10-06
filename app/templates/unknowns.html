@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Unknown faces{% endblock %}
+{% block body %}
+<h1>Unknown faces</h1>
+<p class="muted small">
+  Faces the system saw repeatedly but could not match. Enroll one in a single
+  step, or dismiss it. Snapshots auto-delete per the retention setting.
+</p>
+
+{% if not rows %}
+  <div class="card"><div class="empty">Nothing waiting for review</div></div>
+{% endif %}
+
+<div class="grid two">
+  {% for r in rows %}
+  <div class="card">
+    <div style="display:flex;gap:.8rem;align-items:flex-start">
+      <img class="thumb" style="width:92px;height:92px" src="/media/{{ r.image }}" alt="">
+      <div style="flex:1">
+        <div class="mono small muted">{{ r.ts }}</div>
+        <div class="small muted">best score {{ '%.2f'|format(r.score or 0) }}</div>
+
+        <form method="post" action="/admin/unknowns/{{ r.id }}/enroll" style="margin-top:.5rem">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label for="n{{ r.id }}">Name</label>
+          <input id="n{{ r.id }}" name="name" required>
+          <label for="c{{ r.id }}">Employee code</label>
+          <input id="c{{ r.id }}" name="emp_code">
+          <div style="margin-top:.6rem"><button class="btn primary block">Enroll this person</button></div>
+        </form>
+
+        <form method="post" action="/admin/unknowns/{{ r.id }}/dismiss" style="margin-top:.4rem">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn block">Dismiss</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

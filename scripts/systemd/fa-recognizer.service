@@ -1,0 +1,34 @@
+[Unit]
+Description=Face Attendance - recognizer (camera + inference)
+Documentation=file://@ROOT@/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@ROOT@
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=2
+Environment=OPENBLAS_NUM_THREADS=2
+Environment=MKL_NUM_THREADS=2
+ExecStart=@ROOT@/.venv/bin/python -m app.recognizer_service
+
+# Pinned to cores 0-1. The dashboard gets core 2, the OS gets core 3.
+CPUAffinity=0 1
+CPUWeight=200
+IOWeight=200
+
+# Camera and GPU access for libcamera/picamera2.
+SupplementaryGroups=video render input
+
+Restart=always
+RestartSec=3
+StartLimitBurst=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fa-recognizer
+
+[Install]
+WantedBy=multi-user.target
