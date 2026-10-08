@@ -27,6 +27,12 @@ app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")),
           name="static")
 templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 
+# Initials and a stable colour slot stand in for a face image everywhere a
+# list shows a person. Face crops appear only on the Unknown review page and
+# on a person's own detail page, both behind authentication.
+templates.env.filters["initials"] = attendance.initials
+templates.env.filters["avatar"] = attendance.avatar
+
 STATUS_LABEL = {
     "on_time": "On time",
     "late": "Late",
@@ -39,6 +45,25 @@ STATUS_LABEL = {
 
 def conn():
     return db.init()
+
+
+def recognizer_up(c):
+    """True if the recognizer has sent a heartbeat recently. Everything the
+    dashboard says about 'now' is meaningless if this is False, so every page
+    that implies live data checks it."""
+    row = c.execute("SELECT ts FROM health WHERE id=1").fetchone()
+    if not row or not row["ts"]:
+        return False
+    try:
+        return (time.time() - time.mktime(
+            time.strptime(row["ts"], "%Y-%m-%d %H:%M:%S"))) < 45
+    except Exception:
+        return False
+
+
+def pending_unknowns(c):
+    return c.execute(
+        "SELECT COUNT(*) AS n FROM unknowns WHERE resolved=0").fetchone()["n"]
 
 
 def client_ip(request):
@@ -62,6 +87,12 @@ def render(request, name, **ctx):
     ctx.setdefault("user", user)
     ctx.setdefault("site", config.g("site.name", "Main Gate"))
     ctx.setdefault("status_label", STATUS_LABEL)
+    # Drives the red count on the Unknown tab in the nav rail.
+    if user and "pending_unknowns" not in ctx:
+        try:
+            ctx["pending_unknowns"] = pending_unknowns(conn())
+        except Exception:
+            ctx["pending_unknowns"] = 0
     ctx["csrf"] = token
     ctx["request"] = request
     response = templates.TemplateResponse(name, ctx)
@@ -95,7 +126,7 @@ def kiosk(request: Request):
     c = conn()
     return render(request, "kiosk.html",
                   summary=attendance.summary(c),
-                  events=attendance.recent_events(c, 6))
+                  events=attendance.recent_events(c, 8))
 
 
 def mjpeg_frames():
@@ -135,21 +166,19 @@ def stream():
 
 @app.get("/api/live")
 def api_live():
+    """Polled by the kiosk and the dashboard feed every two seconds.
+
+    Face crops are already stripped by attendance.recent_events() unless the
+    installation turned them on, so this endpoint is safe to expose on the
+    kiosk page, which needs no login.
+    """
     c = conn()
     health = dict(c.execute("SELECT * FROM health WHERE id=1").fetchone() or {})
-    fresh = False
-    if health.get("ts"):
-        try:
-            age = time.time() - time.mktime(
-                time.strptime(health["ts"], "%Y-%m-%d %H:%M:%S"))
-            fresh = age < 45
-        except Exception:
-            fresh = False
     return JSONResponse({
         "summary": attendance.summary(c),
-        "events": attendance.recent_events(c, 8),
+        "events": attendance.recent_events(c, 10),
         "health": health,
-        "recognizer_up": fresh,
+        "recognizer_up": recognizer_up(c),
         "clock": time.strftime("%H:%M:%S"),
     })
 
@@ -225,8 +254,13 @@ def admin_home(request: Request):
     """).fetchone()
     return render(request, "dashboard.html",
                   summary=attendance.summary(c),
-                  events=attendance.recent_events(c, 8),
-                  health=health, counts=dict(counts))
+                  events=attendance.recent_events(c, 10),
+                  health=health, counts=dict(counts),
+                  recognizer_up=recognizer_up(c),
+                  pending_unknowns=counts["unknowns"],
+                  store_thumbs=bool(config.g("privacy.store_event_thumbs", False)),
+                  shift_start=config.g("attendance.shift_start", "09:00"),
+                  grace=config.g("attendance.grace_minutes", 10))
 
 
 @app.get("/admin/today", response_class=HTMLResponse)
@@ -368,7 +402,17 @@ def person_detail(request: Request, person_id: int):
     person = c.execute("SELECT * FROM people WHERE id=?", (person_id,)).fetchone()
     if person is None:
         raise HTTPException(404, "No such person")
-    return render(request, "person.html", person=dict(person),
+    # If privacy.store_event_thumbs is on, surface the stored proof image for
+    # each day here - on an authenticated, single-person page - and nowhere
+    # else. This is the only route by which a stored attendance crop is shown.
+    proof = {}
+    for row in c.execute(
+            "SELECT ts, kind, thumb FROM events WHERE person_id=? "
+            "AND thumb IS NOT NULL ORDER BY id", (person_id,)).fetchall():
+        proof.setdefault(row["ts"][:10], {})[row["kind"] or "check_in"] = \
+            row["thumb"]
+
+    return render(request, "person.html", person=dict(person), proof=proof,
                   templates_=[dict(r) for r in c.execute(
                       "SELECT id, pose, quality, created_at FROM templates "
                       "WHERE person_id=? ORDER BY id", (person_id,)).fetchall()],
@@ -449,9 +493,11 @@ def delete_person(request: Request, person_id: int, confirm: str = Form(""),
 def unknowns_page(request: Request):
     require(request, "hr")
     c = conn()
-    return render(request, "unknowns.html", rows=[dict(r) for r in c.execute(
-        "SELECT * FROM unknowns WHERE resolved=0 ORDER BY id DESC LIMIT 60"
-    ).fetchall()])
+    return render(request, "unknowns.html",
+                  retention_days=config.g("retention.unknown_days", 14),
+                  rows=[dict(r) for r in c.execute(
+                      "SELECT * FROM unknowns WHERE resolved=0 "
+                      "ORDER BY id DESC LIMIT 60").fetchall()])
 
 
 @app.post("/admin/unknowns/{unknown_id}/dismiss")
@@ -552,14 +598,7 @@ def health_page(request: Request):
     require(request, "viewer")
     c = conn()
     health = dict(c.execute("SELECT * FROM health WHERE id=1").fetchone() or {})
-    fresh = False
-    if health.get("ts"):
-        try:
-            fresh = (time.time() - time.mktime(time.strptime(
-                health["ts"], "%Y-%m-%d %H:%M:%S"))) < 45
-        except Exception:
-            pass
-    return render(request, "health.html", health=health, up=fresh,
+    return render(request, "health.html", health=health, up=recognizer_up(c),
                   audit=[dict(r) for r in c.execute(
                       "SELECT * FROM audit ORDER BY id DESC LIMIT 40").fetchall()])
 
@@ -576,6 +615,9 @@ def settings_save(request: Request, csrf: str = Form(...),
                   site_name: str = Form(...), threshold: float = Form(...),
                   votes: int = Form(...), shift_start: str = Form(...),
                   shift_end: str = Form(...), grace: int = Form(...),
+                  rescan_gap: int = Form(...), min_work: int = Form(...),
+                  store_thumbs: str = Form(""),
+                  blur_preview: str = Form(""), log_unknowns: str = Form(""),
                   liveness_on: str = Form(""), liveness_threshold: float = Form(...),
                   motion_on: str = Form(""), roi: str = Form("")):
     user = require(request, "admin")
@@ -587,6 +629,14 @@ def settings_save(request: Request, csrf: str = Form(...),
     cfg["attendance"]["shift_start"] = shift_start.strip()
     cfg["attendance"]["shift_end"] = shift_end.strip()
     cfg["attendance"]["grace_minutes"] = int(grace)
+    # Duplicate handling. Clamped rather than trusted: a zero rescan gap
+    # reintroduces exactly the behaviour these settings exist to prevent.
+    cfg["attendance"]["min_rescan_gap_s"] = max(10, min(900, int(rescan_gap)))
+    cfg["attendance"]["min_work_minutes"] = max(0, min(720, int(min_work)))
+    cfg.setdefault("privacy", {})
+    cfg["privacy"]["store_event_thumbs"] = bool(store_thumbs)
+    cfg["privacy"]["blur_kiosk_preview"] = bool(blur_preview)
+    cfg["privacy"]["log_unknown_faces"] = bool(log_unknowns)
     cfg["liveness"]["enabled"] = bool(liveness_on)
     cfg["liveness"]["threshold"] = float(liveness_threshold)
     cfg["motion"]["enabled"] = bool(motion_on)
@@ -602,8 +652,10 @@ def settings_save(request: Request, csrf: str = Form(...),
     config.save(cfg)
     c = conn()
     db.audit(c, "settings.save", actor=user["u"], ip=client_ip(request),
-             detail="threshold=%s votes=%s liveness=%s"
-                    % (threshold, votes, bool(liveness_on)))
+             detail="threshold=%s votes=%s liveness=%s rescan_gap=%s "
+                    "min_work=%s store_thumbs=%s"
+                    % (threshold, votes, bool(liveness_on), rescan_gap,
+                       min_work, bool(store_thumbs)))
     c.execute("INSERT INTO commands(kind, created_at) VALUES ('reload', ?)",
               (db.now(),))
     return RedirectResponse("/admin/settings?saved=1", status_code=303)

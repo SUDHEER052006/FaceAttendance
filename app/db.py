@@ -29,14 +29,19 @@ CREATE TABLE IF NOT EXISTS templates (
 CREATE INDEX IF NOT EXISTS idx_tpl_person ON templates(person_id);
 
 -- Every recognition the pipeline commits to. Append-only.
+-- Only *attendance transitions* land here: one row for the check-in and one
+-- for the check-out. Repeat sightings of somebody already logged are dropped
+-- by the recognizer and never reach this table - that is what keeps the feed
+-- readable and stops the same face being written to disk forty times.
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id  INTEGER REFERENCES people(id) ON DELETE SET NULL,
     ts         TEXT NOT NULL,
+    kind       TEXT,                  -- check_in | check_out
     score      REAL,
     liveness   REAL,
     votes      INTEGER,
-    thumb      TEXT,
+    thumb      TEXT,                  -- NULL unless privacy.store_event_thumbs
     synced     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ev_ts ON events(ts);
@@ -54,6 +59,8 @@ CREATE TABLE IF NOT EXISTS attendance (
                                              -- a late arrival who leaves early
                                              -- still counts as late
     minutes     INTEGER DEFAULT 0,
+    last_seen   TEXT,                  -- most recent sighting, punch or not
+    sightings   INTEGER NOT NULL DEFAULT 0,
     corrected   INTEGER NOT NULL DEFAULT 0,
     note        TEXT,
     UNIQUE(person_id, day)
@@ -134,9 +141,44 @@ def connect():
     return conn
 
 
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS will not
+# touch a table that already exists, so new columns are applied by hand here.
+# Keep appending to this list; never reorder or remove an entry.
+MIGRATIONS = [
+    ("attendance", "last_seen", "TEXT"),
+    ("attendance", "sightings", "INTEGER NOT NULL DEFAULT 0"),
+    ("events",     "kind",      "TEXT"),
+]
+
+
+def migrate(conn):
+    """Add any missing columns to an existing database. Idempotent.
+
+    This runs on every connection, and the web process opens one per request,
+    so it must stay read-only in the steady state - the back-fill below fires
+    only on the single connection that actually adds the column.
+    """
+    added = []
+    for table, column, decl in MIGRATIONS:
+        have = {r["name"] for r in
+                conn.execute("PRAGMA table_info(%s)" % table).fetchall()}
+        if column not in have:
+            conn.execute("ALTER TABLE %s ADD COLUMN %s %s"
+                         % (table, column, decl))
+            added.append(column)
+    if "last_seen" in added:
+        # Rows written before the column existed have nothing for the
+        # de-duplication window to compare against.
+        conn.execute("UPDATE attendance SET "
+                     "last_seen = COALESCE(check_out, check_in) "
+                     "WHERE last_seen IS NULL")
+    return added
+
+
 def init():
     conn = connect()
     conn.executescript(SCHEMA)
+    migrate(conn)
     conn.execute("INSERT OR IGNORE INTO health(id) VALUES (1)")
     return conn
 

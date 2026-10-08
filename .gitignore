@@ -7,3 +7,4 @@ data/
 __pycache__/
 .installed
 *.log
+app/static/offline.jpg

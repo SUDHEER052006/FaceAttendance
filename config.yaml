@@ -53,11 +53,32 @@ motion:
   cooldown_s: 6             # stay in active mode this long after last motion
 
 attendance:
-  min_rescan_gap_s: 120     # ignore the same person again within this window
+  # The same person seen again inside this window is ignored completely - no
+  # event row, no face image, no attendance change. This is the single setting
+  # that stops one person at the door becoming forty log entries.
+  min_rescan_gap_s: 90
+  # A later sighting is only treated as a DEPARTURE if it is at least this far
+  # after check-in. Somebody who loiters at the gate for ten minutes has not
+  # gone home, so they must not get a ten-minute working day.
+  min_work_minutes: 90
   shift_start: "09:00"
   shift_end: "18:00"
   grace_minutes: 10         # arrive within this after shift_start = still on time
   half_day_minutes: 240     # worked less than this = half day
+
+# ------------------------------------------------------------------ privacy
+# Defaults are deliberately the private ones. A face crop is biometric data:
+# storing it, and putting it on a wall-mounted screen, both need a reason.
+privacy:
+  # Keep a face crop alongside each attendance event, as photographic proof of
+  # the punch. Off by default. When on, the crop is visible only on that
+  # person's own detail page, which requires a login - never in the live
+  # activity feed, because the kiosk screen needs no login to watch and is
+  # usually mounted where the whole lobby can read it.
+  store_event_thumbs: false
+  blur_kiosk_preview: false   # blur detected faces in the live camera preview
+  log_unknown_faces: true     # keep snapshots of unmatched faces for review
+  unknown_cooldown_s: 300     # and no more than one snapshot per face per window
 
 tracker:
   iou_threshold: 0.3

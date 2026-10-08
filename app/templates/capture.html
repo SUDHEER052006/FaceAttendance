@@ -1,29 +1,37 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Capturing{% endblock %}
 {% block bodyattr %} data-enroll="{{ cmd_id }}"{% endblock %}
 {% block body %}
-<h1>Capturing face</h1>
+
+<div class="page-head">
+  <h1>Capturing face</h1>
+  <p class="muted small" style="margin:0">Follow the prompt on the right — it updates as each angle is accepted</p>
+</div>
 
 <div class="capture-wrap">
-  <div>
+  <div class="shot">
     <img src="/stream.mjpg" alt="Live camera">
   </div>
 
   <div>
     <div class="card">
-      <h3>Progress <span class="mono right" id="pct" style="float:right">0%</span></h3>
+      <h3 style="justify-content:space-between">
+        <span>{{ ui.icon('camera', 'sm') }} Progress</span>
+        <span class="mono" id="pct">0%</span>
+      </h3>
       <div class="progress"><div id="bar"></div></div>
-      <p class="hint" id="hint" style="margin:.8rem 0 0">Waiting for the camera...</p>
+      <p class="hint" id="hint" style="margin:1rem 0 0">Waiting for the camera…</p>
     </div>
 
-    <div class="flash err" id="err" style="display:none"></div>
+    <div class="banner err" id="err" style="display:none"></div>
 
     <div class="card">
-      <h3>How to get a clean enrollment</h3>
-      <ul style="margin:0;padding-left:1.2rem;line-height:1.7">
-        <li>Face the camera, then slowly look slightly left, right, up, down</li>
-        <li>Only one person in frame</li>
-        <li>No backlight - a window behind you ruins it</li>
+      <h3>{{ ui.icon('info', 'sm') }} How to get a clean enrollment</h3>
+      <ul class="steps">
+        <li>Face the camera, then slowly look <strong>slightly left, right, up, down</strong></li>
+        <li><strong>Only one person</strong> in frame</li>
+        <li><strong>No backlight</strong> — a window behind you ruins it</li>
         <li>Remove sunglasses and masks; normal glasses are fine</li>
       </ul>
     </div>

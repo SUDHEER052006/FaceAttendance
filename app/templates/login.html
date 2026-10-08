@@ -1,11 +1,18 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Staff login{% endblock %}
 {% block body %}
-<div style="max-width:420px;margin:0 auto">
-  <h1>Staff login</h1>
-  <p class="muted small">Attendance keeps recording whether or not anyone is logged in.</p>
+<div style="max-width:420px;margin:1rem auto">
+  <div class="page-head" style="text-align:center">
+    <h1>Staff login</h1>
+    <p class="muted small" style="margin:0">
+      Attendance keeps recording whether or not anyone is signed in.
+    </p>
+  </div>
 
-  {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+  {% if error %}
+  <div class="banner err">{{ ui.icon('warning', 'sm') }}<div>{{ error }}</div></div>
+  {% endif %}
 
   <form method="post" action="/login" class="card">
     <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -14,23 +21,28 @@
     <label for="p">Password</label>
     <input id="p" name="password" type="password" autocomplete="current-password" required>
     <label for="t">6-digit code <span class="muted">(only if 2FA is on)</span></label>
-    <input id="t" name="totp" inputmode="numeric" autocomplete="one-time-code" placeholder="000000">
-    <div style="margin-top:1rem"><button class="btn primary block lg">Sign in</button></div>
+    <input id="t" name="totp" inputmode="numeric" autocomplete="one-time-code"
+           placeholder="000000">
+    <div style="margin-top:1rem">
+      <button class="btn primary block lg">{{ ui.icon('login', 'sm') }} Sign in</button>
+    </div>
   </form>
 
   {% if local %}
   <form method="post" action="/login/pin" class="card">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <h3>Quick unlock on this screen</h3>
+    <h3>{{ ui.icon('key', 'sm') }} Quick unlock on this screen</h3>
     <label for="pin">Admin PIN</label>
     <input id="pin" name="pin" type="password" inputmode="numeric" required>
-    <div style="margin-top:.8rem"><button class="btn block lg">Unlock</button></div>
-    <p class="small muted" style="margin:.7rem 0 0">
+    <div style="margin-top:.875rem">
+      <button class="btn block lg">Unlock</button>
+    </div>
+    <p class="helptext">
       PIN unlock only works on the Pi itself, never over the network.
     </p>
   </form>
   {% endif %}
 
-  <p style="text-align:center"><a href="/">Back to the kiosk screen</a></p>
+  <p style="text-align:center"><a href="/">&larr; Back to the kiosk screen</a></p>
 </div>
 {% endblock %}

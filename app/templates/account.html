@@ -1,17 +1,27 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Account{% endblock %}
 {% block body %}
-<h1>Account</h1>
-{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+
+<div class="page-head">
+  <h1>Account</h1>
+  <p class="muted small" style="margin:0">{{ me.username }} &middot; {{ me.role }}</p>
+</div>
+
+{% if msg %}
+<div class="banner ok">{{ ui.icon('check', 'sm') }}<div>{{ msg }}</div></div>
+{% endif %}
 {% if me.must_change %}
-<div class="flash err">
-  You are still on the password the installer generated. Change it now.
+<div class="banner err">
+  {{ ui.icon('warning', 'sm') }}
+  <div><strong>You are still on the password the installer generated.</strong>
+       Change it now.</div>
 </div>
 {% endif %}
 
 <div class="grid two">
   <div class="card">
-    <h3>{{ me.username }} &middot; {{ me.role }}</h3>
+    <h3>{{ ui.icon('key', 'sm') }} Password</h3>
     <form method="post" action="/admin/account/password">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label for="n1">New password</label>
@@ -20,22 +30,24 @@
       <label for="n2">Repeat it</label>
       <input id="n2" name="new2" type="password" minlength="10" required
              autocomplete="new-password">
-      <div style="margin-top:.8rem"><button class="btn primary block">Change password</button></div>
+      <div style="margin-top:.875rem">
+        <button class="btn primary block">Change password</button>
+      </div>
     </form>
   </div>
 
   <div class="card">
-    <h3>Two-factor</h3>
+    <h3>{{ ui.icon('shield', 'sm') }} Two-factor</h3>
     {% if totp_uri %}
       <p class="small">Scan this in Google Authenticator or Aegis:</p>
-      <p class="mono small" style="word-break:break-all;background:#0d0f16;
-         padding:.6rem;border-radius:10px">{{ totp_uri }}</p>
-      <p class="small muted">
+      <p class="mono small" style="word-break:break-all;background:var(--surface-2);
+         padding:.75rem;border-radius:8px">{{ totp_uri }}</p>
+      <p class="helptext">
         A 6-digit code is now required at every login for this account. Keep a
-        copy of this key somewhere safe &mdash; losing it means losing access.
+        copy of this key somewhere safe — losing it means losing access.
       </p>
     {% elif user.r == 'admin' %}
-      <p class="small muted">
+      <p class="helptext" style="margin-top:0">
         Not enabled. Strongly recommended for any account that can delete
         biometric data or edit attendance.
       </p>
@@ -45,7 +57,9 @@
         <button class="btn block">Enable two-factor</button>
       </form>
     {% else %}
-      <p class="small muted">Only admin accounts can enable 2FA here.</p>
+      <p class="helptext" style="margin-top:0">
+        Only admin accounts can enable 2FA here.
+      </p>
     {% endif %}
   </div>
 </div>

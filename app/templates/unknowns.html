@@ -1,37 +1,59 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Unknown faces{% endblock %}
 {% block body %}
-<h1>Unknown faces</h1>
-<p class="muted small">
-  Faces the system saw repeatedly but could not match. Enroll one in a single
-  step, or dismiss it. Snapshots auto-delete per the retention setting.
-</p>
+
+<div class="page-head">
+  <h1>Unknown faces</h1>
+  <p class="muted small" style="margin:0">
+    Faces the system saw repeatedly but could not match. One snapshot per
+    face, not one per sighting. Enroll in a single step, or dismiss.
+  </p>
+</div>
+
+<div class="banner info">
+  {{ ui.icon('privacy', 'sm') }}
+  <div>
+    These snapshots exist so you can identify a genuine visitor or an
+    intruder, and they auto-delete after
+    <strong>{{ retention_days }} days</strong>. This is the only screen in the
+    app that shows a captured face.
+  </div>
+</div>
 
 {% if not rows %}
-  <div class="card"><div class="empty">Nothing waiting for review</div></div>
+  <div class="card">
+    <div class="empty">{{ ui.icon('check') }}Nothing waiting for review</div>
+  </div>
 {% endif %}
 
 <div class="grid two">
   {% for r in rows %}
   <div class="card">
-    <div style="display:flex;gap:.8rem;align-items:flex-start">
-      <img class="thumb" style="width:92px;height:92px" src="/media/{{ r.image }}" alt="">
-      <div style="flex:1">
-        <div class="mono small muted">{{ r.ts }}</div>
-        <div class="small muted">best score {{ '%.2f'|format(r.score or 0) }}</div>
+    <div style="display:flex;gap:1rem;align-items:flex-start">
+      <img class="thumb" style="width:88px;height:88px" src="/media/{{ r.image }}" alt="">
+      <div style="flex:1;min-width:0">
+        <div class="mono small">{{ r.ts }}</div>
+        <div class="small muted">Best match score {{ '%.2f'|format(r.score or 0) }}
+          &mdash; below the threshold</div>
 
-        <form method="post" action="/admin/unknowns/{{ r.id }}/enroll" style="margin-top:.5rem">
+        <form method="post" action="/admin/unknowns/{{ r.id }}/enroll">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <label for="n{{ r.id }}">Name</label>
           <input id="n{{ r.id }}" name="name" required>
           <label for="c{{ r.id }}">Employee code</label>
           <input id="c{{ r.id }}" name="emp_code">
-          <div style="margin-top:.6rem"><button class="btn primary block">Enroll this person</button></div>
+          <div style="margin-top:.75rem">
+            <button class="btn primary block">
+              {{ ui.icon('person_add', 'sm') }} Enroll this person
+            </button>
+          </div>
         </form>
 
-        <form method="post" action="/admin/unknowns/{{ r.id }}/dismiss" style="margin-top:.4rem">
+        <form method="post" action="/admin/unknowns/{{ r.id }}/dismiss"
+              style="margin-top:.5rem">
           <input type="hidden" name="csrf" value="{{ csrf }}">
-          <button class="btn block">Dismiss</button>
+          <button class="btn quiet block">Dismiss</button>
         </form>
       </div>
     </div>

@@ -1,40 +1,111 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Settings{% endblock %}
 {% block body %}
-<h1>Settings</h1>
-{% if saved %}<div class="flash ok">Saved. The recognizer picked up the change.</div>{% endif %}
+
+<div class="page-head">
+  <h1>Settings</h1>
+  <p class="muted small" style="margin:0">Changes take effect immediately — the recognizer reloads itself</p>
+</div>
+
+{% if saved %}
+<div class="banner ok">{{ ui.icon('check', 'sm') }}<div>Saved. The recognizer picked up the change.</div></div>
+{% endif %}
 
 <form method="post" action="/admin/settings">
   <input type="hidden" name="csrf" value="{{ csrf }}">
 
   <div class="card">
-    <h3>Site</h3>
+    <h3>{{ ui.icon('monitor', 'sm') }} Site</h3>
     <label for="sn">Display name (shown on the kiosk screen)</label>
     <input id="sn" name="site_name" value="{{ cfg.site.name }}" required>
   </div>
 
   <div class="card">
-    <h3>Recognition</h3>
-    <label for="th">Match threshold &mdash; {{ cfg.match.threshold }}</label>
+    <h3>{{ ui.icon('today', 'sm') }} Duplicate handling</h3>
+    <p class="helptext" style="margin:0 0 .5rem">
+      These two settings are why one person walking past the camera produces
+      one attendance row instead of forty. Raise them if the log still feels
+      noisy; lower them only if punches are genuinely being missed.
+    </p>
+
+    <label for="rg">Ignore the same person for (seconds)</label>
+    <input id="rg" name="rescan_gap" type="number" min="10" max="900"
+           value="{{ cfg.attendance.min_rescan_gap_s }}" required>
+    <p class="helptext">
+      Within this window a repeat sighting is discarded completely — no log
+      entry, no stored image, no change to the attendance row. 90 seconds
+      suits a doorway; a turnstile can go lower.
+    </p>
+
+    <label for="mw">Earliest possible check-out (minutes after check-in)</label>
+    <input id="mw" name="min_work" type="number" min="0" max="720"
+           value="{{ cfg.attendance.min_work_minutes }}" required>
+    <p class="helptext">
+      A sighting before this is treated as the person still being around, not
+      as them leaving. Without it, somebody spotted on their way to the
+      canteen was recorded as having worked twenty minutes.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>{{ ui.icon('privacy', 'sm') }} Privacy</h3>
+    <p class="helptext" style="margin:0 0 .5rem">
+      A face crop is biometric data. The defaults below keep it off disk
+      entirely; recognition is unaffected either way, because matching uses
+      the enrolled templates, not these images. The activity feed never shows
+      a captured face regardless of what is set here.
+    </p>
+
+    <div class="check">
+      <input type="checkbox" id="pt" name="store_thumbs" value="1"
+             {{ 'checked' if cfg.privacy.store_event_thumbs }}>
+      <span><strong>Store a face image with every attendance event.</strong>
+        Off by default. Turn this on only if you need photographic proof of
+        each punch. Stored images appear on that person's own page and nowhere
+        else &mdash; never in the activity feed, which the kiosk shows without
+        a login.</span>
+    </div>
+
+    <div class="check">
+      <input type="checkbox" id="pb" name="blur_preview" value="1"
+             {{ 'checked' if cfg.privacy.blur_kiosk_preview }}>
+      <span><strong>Blur faces in the live camera preview.</strong>
+        Tracking boxes and names still appear, so an operator can see the
+        system is working without the panel showing a usable image.</span>
+    </div>
+
+    <div class="check">
+      <input type="checkbox" id="pu" name="log_unknowns" value="1"
+             {{ 'checked' if cfg.privacy.log_unknown_faces }}>
+      <span><strong>Keep snapshots of unrecognised faces for review.</strong>
+        Needed to tell a new joiner from an intruder. Auto-deleted after
+        <code>retention.unknown_days</code> ({{ cfg.retention.unknown_days }} days).</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>{{ ui.icon('camera', 'sm') }} Recognition</h3>
+    <label for="th">Match threshold — currently {{ cfg.match.threshold }}</label>
     <input id="th" name="threshold" type="number" step="0.01" min="0.20" max="0.80"
            value="{{ cfg.match.threshold }}" required>
-    <p class="small muted">
-      Higher = stricter (fewer false matches, more misses). Lower = looser.
-      Do not guess: run <span class="mono">scripts/tune_threshold.py</span> once you
-      have real faces enrolled, and use the number it recommends.
+    <p class="helptext">
+      Higher is stricter: fewer false matches, more misses. Do not guess —
+      run <code>scripts/tune_threshold.py</code> once you have real faces
+      enrolled and use the number it recommends.
     </p>
 
     <label for="vt">Agreeing frames before an event is recorded</label>
     <input id="vt" name="votes" type="number" min="1" max="20"
            value="{{ cfg.match.votes_required }}" required>
-    <p class="small muted">
-      Raise this if you see occasional wrong names; lower it if recognition
-      feels slow at the door.
+    <p class="helptext">
+      Raise this if you ever see a wrong name; lower it if recognition feels
+      slow at the door.
     </p>
   </div>
 
   <div class="card">
-    <h3>Shift policy</h3>
+    <h3>{{ ui.icon('today', 'sm') }} Shift policy</h3>
     <div class="row">
       <div>
         <label for="ss">Shift start</label>
@@ -53,47 +124,48 @@
   </div>
 
   <div class="card">
-    <h3>Anti-spoofing</h3>
+    <h3>{{ ui.icon('shield', 'sm') }} Anti-spoofing</h3>
     <div class="check">
       <input type="checkbox" id="lv" name="liveness_on" value="1"
              {{ 'checked' if cfg.liveness.enabled }}>
-      <span>Reject photos and phone-screen replays</span>
+      <span>Reject printed photos and phone-screen replays</span>
     </div>
     <label for="lt">Liveness threshold</label>
     <input id="lt" name="liveness_threshold" type="number" step="0.01" min="0" max="1"
            value="{{ cfg.liveness.threshold }}" required>
-    <p class="small muted">
-      If no ONNX model is installed, the heuristic engine is used. See the README
-      section "Adding a liveness model" &mdash; the trained model is a large
+    <p class="helptext">
+      If no ONNX model is installed, the heuristic engine is used. See the
+      README section "Adding a liveness model" — the trained model is a large
       accuracy upgrade and worth the ten minutes.
     </p>
   </div>
 
   <div class="card">
-    <h3>Performance</h3>
+    <h3>{{ ui.icon('health', 'sm') }} Performance</h3>
     <div class="check">
       <input type="checkbox" id="mo" name="motion_on" value="1"
              {{ 'checked' if cfg.motion.enabled }}>
-      <span>Skip all inference when nothing is moving (strongly recommended for 24/7)</span>
+      <span>Skip all inference when nothing is moving — strongly recommended
+            for 24/7 operation</span>
     </div>
-    <label for="roi">Detection region &mdash; x, y, width, height in 640x480 pixels</label>
+    <label for="roi">Detection region — x, y, width, height in 640&times;480 pixels</label>
     <input id="roi" name="roi" placeholder="leave blank for the whole frame"
            value="{{ cfg.camera.roi|join(', ') if cfg.camera.roi else '' }}">
-    <p class="small muted">
-      Cropping to just the doorway is often a 3-4x speedup. Watch the kiosk
-      preview to see the box you have set.
+    <p class="helptext">
+      Cropping to just the doorway is often a 3–4&times; speedup. Watch the
+      kiosk preview to see the box you have set.
     </p>
   </div>
 
-  <button class="btn primary block lg">Save settings</button>
+  <button class="btn primary block lg">{{ ui.icon('check', 'sm') }} Save settings</button>
 </form>
 
-<div class="card" style="margin-top:.75rem">
-  <h3>Not editable here</h3>
-  <p class="small muted" style="margin:0">
+<div class="card" style="margin-top:1rem">
+  <h3>{{ ui.icon('info', 'sm') }} Not editable here</h3>
+  <p class="helptext" style="margin:0">
     Camera resolution, frame rates, quality gates and retention live in
-    <span class="mono">config.yaml</span> on the Pi. Edit the file and restart
-    with <span class="mono">sudo systemctl restart fa-recognizer</span>.
+    <code>config.yaml</code> on the Pi. Edit the file and restart with
+    <code>sudo systemctl restart fa-recognizer</code>.
   </p>
 </div>
 {% endblock %}

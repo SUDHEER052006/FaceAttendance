@@ -1,41 +1,58 @@
-<!doctype html>
+{% import "icons.html" as ui %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
   <title>{% block title %}Attendance{% endblock %} &middot; {{ site }}</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body{% block bodyattr %}{% endblock %}>
 
 <header class="bar">
-  <div class="title">{{ site }}</div>
+  <div class="brand">
+    <span class="mark">{{ ui.icon('shield') }}</span>
+    <span>
+      <div class="title">{{ site }}</div>
+      <div class="sub">Face attendance</div>
+    </span>
+  </div>
   <div class="spacer"></div>
   {% if user %}
-    <span class="small muted">{{ user.u }} &middot; {{ user.r }}</span>
-    <form method="post" action="/logout" style="margin:0">
-      <button class="btn" style="min-height:44px;padding:0 .8rem">Exit</button>
-    </form>
+    <div class="who">
+      <span class="name">{{ user.u }} &middot; {{ user.r }}</span>
+      <form method="post" action="/logout" style="margin:0">
+        <button class="btn quiet sm" title="Sign out">
+          {{ ui.icon('logout', 'sm') }} Exit
+        </button>
+      </form>
+    </div>
   {% else %}
-    <a class="btn" style="min-height:44px;padding:0 .8rem" href="/login">Staff login</a>
+    <a class="btn tonal sm" href="/login">{{ ui.icon('login', 'sm') }} Staff login</a>
   {% endif %}
 </header>
 
 {% if user %}
-<nav class="tabs">
-  {% set p = request.url.path %}
-  <a href="/"               class="{{ 'on' if p == '/' }}"><span class="ico">📺</span>Kiosk</a>
-  <a href="/admin"          class="{{ 'on' if p == '/admin' }}"><span class="ico">📊</span>Overview</a>
-  <a href="/admin/today"    class="{{ 'on' if p.startswith('/admin/today') }}"><span class="ico">📅</span>Today</a>
-  <a href="/admin/register" class="{{ 'on' if p.startswith('/admin/register') }}"><span class="ico">➕</span>Register</a>
-  <a href="/admin/people"   class="{{ 'on' if p.startswith('/admin/people') }}"><span class="ico">👥</span>People</a>
-  <a href="/admin/unknowns" class="{{ 'on' if p.startswith('/admin/unknowns') }}"><span class="ico">❓</span>Unknown</a>
-  <a href="/admin/reports"  class="{{ 'on' if p.startswith('/admin/reports') }}"><span class="ico">📈</span>Reports</a>
-  <a href="/admin/health"   class="{{ 'on' if p.startswith('/admin/health') }}"><span class="ico">💓</span>Health</a>
+{% set p = request.url.path %}
+{% macro tab(href, label, ico, active, badge=0) -%}
+  <a href="{{ href }}" class="{{ 'on' if active }}">
+    <span class="dot">{{ ui.icon(ico) }}{% if badge %}<span class="badge">{{ badge }}</span>{% endif %}</span>
+    <span class="lbl">{{ label }}</span>
+  </a>
+{%- endmacro %}
+<nav class="rail">
+  {{ tab('/',               'Kiosk',    'monitor',    p == '/') }}
+  {{ tab('/admin',          'Overview',  'dashboard', p == '/admin') }}
+  {{ tab('/admin/today',    'Today',     'today',     p.startswith('/admin/today')) }}
+  {{ tab('/admin/register', 'Register',  'person_add', p.startswith('/admin/register')) }}
+  {{ tab('/admin/people',   'People',    'people',    p.startswith('/admin/people')) }}
+  {{ tab('/admin/unknowns', 'Unknown',   'help',      p.startswith('/admin/unknowns'), pending_unknowns or 0) }}
+  {{ tab('/admin/reports',  'Reports',   'reports',   p.startswith('/admin/reports')) }}
+  {{ tab('/admin/health',   'Health',    'health',    p.startswith('/admin/health')) }}
   {% if user.r == 'admin' %}
-  <a href="/admin/settings" class="{{ 'on' if p.startswith('/admin/settings') }}"><span class="ico">⚙️</span>Settings</a>
+  {{ tab('/admin/settings', 'Settings',  'settings',  p.startswith('/admin/settings')) }}
   {% endif %}
-  <a href="/admin/account"  class="{{ 'on' if p.startswith('/admin/account') }}"><span class="ico">🔑</span>Account</a>
+  {{ tab('/admin/account',  'Account',   'key',       p.startswith('/admin/account')) }}
 </nav>
 {% endif %}
 

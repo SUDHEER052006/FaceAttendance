@@ -1,8 +1,9 @@
-<!doctype html>
+{% import "icons.html" as ui %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
   <title>{{ site }} &middot; Attendance</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -12,7 +13,8 @@
 
   <div class="kiosk-video">
     <img src="/stream.mjpg" alt="Live camera">
-    <div class="tag" id="status-badge">LIVE</div>
+    <div class="tag" id="status-badge"><span class="dotmark"></span>Live</div>
+    <div class="sitetag">{{ site }}</div>
   </div>
 
   <div class="kiosk-side">
@@ -22,34 +24,40 @@
     </div>
 
     <div class="kiosk-counts">
-      <div class="stat ok">  <div class="n" id="c-present">{{ summary.present }}</div><div class="k">In</div></div>
-      <div class="stat warn"><div class="n" id="c-late">{{ summary.late }}</div>   <div class="k">Late</div></div>
-      <div class="stat bad"> <div class="n" id="c-absent">{{ summary.absent }}</div><div class="k">Out</div></div>
+      <div class="stat info"><div class="n" id="c-inside">{{ summary.inside }}</div><div class="k">On site</div></div>
+      <div class="stat warn"><div class="n" id="c-late">{{ summary.late }}</div><div class="k">Late</div></div>
+      <div class="stat bad"> <div class="n" id="c-absent">{{ summary.absent }}</div><div class="k">Absent</div></div>
     </div>
 
-    <div class="feed" id="feed">
-      {% for e in events %}
-      <div class="ev">
-        {% if e.thumb %}<img src="/media/{{ e.thumb }}" alt="">{% else %}<img alt="">{% endif %}
-        <div>
-          <div class="nm">{{ e.name }}</div>
-          <div class="tm">{{ e.ts[11:16] }}</div>
+    <div class="kiosk-feed-card">
+      <div class="hd">Recent activity</div>
+      <div class="feed" id="feed">
+        {% for e in events %}
+        <div class="ev">
+          <span class="av c{{ e.avatar }}{{ ' unknown' if not e.person_id }}">{{ e.initials }}</span>
+          <div class="grow">
+            <div class="nm">{{ e.name }}</div>
+          </div>
+          <span class="pill {{ e.kind }}">{{ 'In' if e.kind == 'check_in' else 'Out' }}</span>
+          <span class="tm">{{ e.ts[11:16] }}</span>
         </div>
+        {% else %}
+        <div class="empty">{{ ui.icon('inbox') }}No activity yet today</div>
+        {% endfor %}
       </div>
-      {% else %}
-      <div class="empty">No activity yet today</div>
-      {% endfor %}
     </div>
 
     <div class="kiosk-foot">
-      <a class="btn" href="/login">Staff login</a>
+      <a class="btn" href="/login">{{ ui.icon('login', 'sm') }} Staff login</a>
     </div>
   </div>
 </div>
 
-<!-- Fullscreen greeting that flashes when somebody is recognised. The whole
-     reason the 7" screen is there: instant, unambiguous feedback. -->
+<!-- Fullscreen confirmation that flashes when somebody is recorded. The whole
+     reason the 7" screen is there: instant, unambiguous feedback, with no
+     face image on a display that the whole lobby can see. -->
 <div id="greeting">
+  <div class="ring">{{ ui.icon('check') }}</div>
   <div class="big" id="greet-name">Welcome</div>
   <div class="sub" id="greet-sub"></div>
 </div>

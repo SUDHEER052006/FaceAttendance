@@ -12,9 +12,24 @@ Loop shape:
       -> IOU tracker associates boxes to tracks
       -> for unresolved tracks only: align from the main stream, quality gate,
          ArcFace embed, cosine match
-      -> push a vote; once N frames agree, run liveness, write the event and
-         the attendance row
+      -> push a vote; once N frames agree, run liveness, then let the
+         attendance policy decide whether this is a punch at all
       -> publish an annotated JPEG to /dev/shm for the dashboard to stream
+
+De-duplication happens at THREE levels, and all three are needed:
+
+  1. per track   - a track that has been resolved is never embedded again, so
+                   somebody standing in frame costs a handful of embeddings
+  2. per person  - a short-lived cooldown keyed on person_id. Tracks die and
+                   respawn constantly (a head turn, a dropped detection, the
+                   motion gate going idle), and without this each respawn
+                   logged the same person again. This is the one that fixes
+                   the "forty entries for one person" behaviour.
+  3. per policy  - attendance.record() has the final say and reports 'seen' or
+                   'duplicate' for anything that is not a real punch
+
+An event row and a face image are written ONLY when level 3 reports a genuine
+check_in or check_out. Everything else leaves no trace beyond last_seen.
 """
 import json
 import os
@@ -95,6 +110,19 @@ class Service:
         self.last_purge = 0.0
         self.banner = None          # (text, expires_at) overlaid on the preview
 
+        # person_id -> time.time() of the last committed punch. See level 2 in
+        # the module docstring. Seeded from the database so a restart does not
+        # re-log everybody who is already checked in today.
+        self.seen_recent = {}
+        self.load_cooldowns()
+        # Recent unmatched embeddings, so one stranger at the door produces one
+        # snapshot for review rather than a folder full of the same face.
+        self.unknown_recent = []    # [(embedding, time.time())]
+        # Spoof attempts are ALWAYS rejected, but only audited once per person
+        # per window - somebody holding a photo up to the lens for a minute
+        # would otherwise bury every other entry in the audit log.
+        self.spoof_logged = {}
+
     # ---------------------------------------------------------------- helpers
 
     def roi_slice(self, lores):
@@ -118,48 +146,135 @@ class Service:
     def say(self, text, seconds=3.0):
         self.banner = (text, time.time() + seconds)
 
+    # -------------------------------------------------------- de-duplication
+
+    def load_cooldowns(self):
+        """Seed the per-person cooldown from today's attendance rows.
+
+        Without this, restarting the service mid-shift re-logs an event for
+        everybody who walks past next, because the in-memory map is empty.
+        """
+        gap = float(config.g("attendance.min_rescan_gap_s", 90))
+        now = time.time()
+        for row in self.conn.execute(
+                "SELECT person_id, last_seen FROM attendance WHERE day=? "
+                "AND last_seen IS NOT NULL", (db.today(),)).fetchall():
+            try:
+                age = now - time.mktime(time.strptime(
+                    row["last_seen"], "%Y-%m-%d %H:%M:%S"))
+            except Exception:
+                continue
+            if 0 <= age < gap:
+                self.seen_recent[row["person_id"]] = now - age
+
+    def in_cooldown(self, person_id):
+        last = self.seen_recent.get(person_id)
+        if last is None:
+            return False
+        gap = float(config.g("attendance.min_rescan_gap_s", 90))
+        if (time.time() - last) < gap:
+            return True
+        del self.seen_recent[person_id]
+        return False
+
+    def prune_cooldowns(self):
+        """Keep both dedup maps from growing without bound."""
+        gap = float(config.g("attendance.min_rescan_gap_s", 90))
+        ucool = float(config.g("privacy.unknown_cooldown_s", 300))
+        now = time.time()
+        self.seen_recent = {k: v for k, v in self.seen_recent.items()
+                            if (now - v) < gap}
+        self.spoof_logged = {k: v for k, v in self.spoof_logged.items()
+                             if (now - v) < gap}
+        self.unknown_recent = [(e, t) for e, t in self.unknown_recent
+                               if (now - t) < ucool]
+
     # ------------------------------------------------------------------ events
 
     def commit(self, track, person_id, score, crop, votes):
+        """A track has agreed on an identity. Decide whether to record it."""
+        name = self.matcher.names.get(person_id, "#%s" % person_id)
+
+        # Level 2: this person was recorded moments ago. Resolve the track so
+        # it stops costing inference, label it on the preview, and write
+        # nothing. No event row, no face image on disk.
+        if self.in_cooldown(person_id):
+            track.resolved = True
+            track.person_id = person_id
+            self.say("%s - already recorded" % name, 2.0)
+            return
+
         live_score = None
         if self.liveness is not None:
             live_score = self.liveness.score(crop)
             if live_score < float(config.g("liveness.threshold", 0.55)):
                 track.resolved = True
                 track.liveness = live_score
-                self.say("SPOOF REJECTED (%.2f)" % live_score, 4.0)
-                db.audit(self.conn, "liveness.reject",
-                         actor="recognizer", target=str(person_id),
-                         detail="score=%.3f" % live_score)
-                print("[recognizer] spoof rejected for person %s (%.3f)"
-                      % (person_id, live_score))
+                self.say("Not a live face - rejected", 4.0)
+                gap = float(config.g("attendance.min_rescan_gap_s", 90))
+                last = self.spoof_logged.get(person_id)
+                if last is None or (time.time() - last) >= gap:
+                    self.spoof_logged[person_id] = time.time()
+                    db.audit(self.conn, "liveness.reject",
+                             actor="recognizer", target=str(person_id),
+                             detail="score=%.3f (repeats within %ds are "
+                                    "rejected but not re-logged)"
+                                    % (live_score, gap))
+                    print("[recognizer] spoof rejected for person %s (%.3f)"
+                          % (person_id, live_score))
                 return
 
         ts = db.now()
-        thumb_rel = os.path.join(
-            "thumbs", ts[:10], "%s_%s.jpg" % (ts[11:].replace(":", ""), person_id))
-        save_jpg(os.path.join(config.abspath("data"), thumb_rel), crop)
-
-        self.conn.execute(
-            "INSERT INTO events(person_id, ts, score, liveness, votes, thumb) "
-            "VALUES (?,?,?,?,?,?)",
-            (person_id, ts, score, live_score, votes, thumb_rel))
-
+        # Level 3: the policy has the final say. Ask it BEFORE writing anything,
+        # so a re-sighting never reaches the events table or the disk.
         kind, _row = attendance.record(self.conn, person_id, ts)
+
         track.resolved = True
         track.person_id = person_id
         track.liveness = live_score
-        track.thumb = thumb_rel
+        self.seen_recent[person_id] = time.time()
 
-        name = self.matcher.names.get(person_id, "#%s" % person_id)
-        if kind == "check_in":
-            self.say("Welcome, %s" % name, 4.0)
-        elif kind == "check_out":
-            self.say("Bye, %s" % name, 4.0)
+        if kind in ("duplicate", "seen"):
+            self.say("%s - already recorded" % name, 2.0)
+            return
+
+        # Only a genuine punch gets an event row, and only a deliberately
+        # configured installation gets a face image kept alongside it.
+        thumb_rel = None
+        if config.g("privacy.store_event_thumbs", False):
+            thumb_rel = os.path.join(
+                "thumbs", ts[:10],
+                "%s_%s.jpg" % (ts[11:].replace(":", ""), person_id))
+            save_jpg(os.path.join(config.abspath("data"), thumb_rel), crop)
+            track.thumb = thumb_rel
+
+        self.conn.execute(
+            "INSERT INTO events(person_id, ts, kind, score, liveness, votes, "
+            "thumb) VALUES (?,?,?,?,?,?,?)",
+            (person_id, ts, kind, score, live_score, votes, thumb_rel))
+
+        self.say("Welcome, %s" % name if kind == "check_in" else "Bye, %s" % name,
+                 4.0)
         print("[recognizer] %s %s score=%.3f votes=%d live=%s"
               % (kind, name, score, votes, live_score))
 
-    def log_unknown(self, track, crop, score):
+    def log_unknown(self, track, crop, emb, score):
+        """Save a snapshot of a face that matched nobody, once per face.
+
+        The same stranger standing at the door spawns a fresh track every
+        couple of seconds, so this is gated both by time and by embedding
+        similarity against what has already been logged.
+        """
+        track.resolved = True
+        if not config.g("privacy.log_unknown_faces", True):
+            return
+
+        cooldown = float(config.g("privacy.unknown_cooldown_s", 300))
+        now = time.time()
+        for prev, when in self.unknown_recent:
+            if (now - when) < cooldown and float(prev @ emb) > 0.5:
+                return      # already have this face from a moment ago
+
         ts = db.now()
         rel = os.path.join("unknowns", ts[:10],
                            "%s.jpg" % ts[11:].replace(":", ""))
@@ -167,7 +282,7 @@ class Service:
         self.conn.execute(
             "INSERT INTO unknowns(ts, image, score) VALUES (?,?,?)",
             (ts, rel, score))
-        track.resolved = True
+        self.unknown_recent.append((emb.copy(), now))
         self.say("Unknown face logged", 3.0)
 
     # --------------------------------------------------------------- main loop
@@ -213,15 +328,15 @@ class Service:
 
         if crops:
             embeddings = self.embedder.embed(crops)
-            for (track, crop, _r), (pid, score) in zip(
-                    metas, self.matcher.query(embeddings)):
+            for (track, crop, _r), emb, (pid, score) in zip(
+                    metas, embeddings, self.matcher.query(embeddings)):
                 track.push_vote(pid, score)
                 verdict_pid, mean_score, votes = track.verdict()
                 if verdict_pid is not None:
                     self.commit(track, verdict_pid, mean_score, crop, votes)
                 elif (len(track.votes) >= config.g("match.vote_window", 10)
                       and track.miss_ratio() > 0.8):
-                    self.log_unknown(track, crop, score)
+                    self.log_unknown(track, crop, emb, score)
 
         self.draw(lores, faces, pairs, offset)
 
@@ -237,6 +352,19 @@ class Service:
     def draw(self, lores, faces, pairs, offset):
         img = lores.copy()
         ox, oy = offset
+
+        # Optional: blur faces in the preview. A kiosk screen in a public
+        # lobby is visible to everybody who walks past it, and the operator
+        # only needs to see that the camera is working and tracking.
+        if config.g("privacy.blur_kiosk_preview", False):
+            for face in faces:
+                fx, fy, fw, fh = [int(v) for v in face["box"]]
+                fx, fy = max(0, fx + ox), max(0, fy + oy)
+                patch = img[fy:fy + fh, fx:fx + fw]
+                if patch.size:
+                    k = max(9, (min(patch.shape[:2]) // 3) | 1)
+                    img[fy:fy + fh, fx:fx + fw] = cv2.GaussianBlur(
+                        patch, (k, k), 0)
         roi = config.g("camera.roi")
         if roi:
             x, y, w, h = [int(v) for v in roi]
@@ -473,9 +601,23 @@ class Service:
             except OSError:
                 pass
         self.conn.execute("DELETE FROM unknowns WHERE ts < ?", (cutoff_u,))
+
+        # Events may carry a stored face image (privacy.store_event_thumbs).
+        # Deleting the row without the file would leave biometric images on
+        # disk forever, which defeats the whole point of a retention window.
+        old_events = self.conn.execute(
+            "SELECT thumb FROM events WHERE ts < ? AND thumb IS NOT NULL",
+            (cutoff_e,)).fetchall()
+        for row in old_events:
+            try:
+                os.remove(os.path.join(config.abspath("data"), row["thumb"]))
+            except OSError:
+                pass
         self.conn.execute("DELETE FROM events WHERE ts < ?", (cutoff_e,))
-        if stale:
-            print("[recognizer] purged %d unknown snapshots" % len(stale))
+
+        if stale or old_events:
+            print("[recognizer] purged %d unknown snapshots, %d event images"
+                  % (len(stale), len(old_events)))
 
     def run(self):
         print("[recognizer] running - camera %s, lores %s, main %s"
@@ -500,6 +642,7 @@ class Service:
                     print("[recognizer] command poll failed: %s" % exc)
             if now - self.last_health > 10.0:
                 self.last_health = now
+                self.prune_cooldowns()
                 try:
                     self.heartbeat()
                 except Exception:

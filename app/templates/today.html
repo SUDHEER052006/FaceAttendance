@@ -1,38 +1,73 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}Today{% endblock %}
 {% block body %}
-<h1>Attendance</h1>
 
-<form method="get" action="/admin/today" class="row" style="margin-bottom:.75rem">
-  <div>
-    <label for="day">Date</label>
-    <input id="day" type="date" name="day" value="{{ day }}">
+<div class="page-head">
+  <h1>Day sheet</h1>
+  <p class="muted small" style="margin:0">
+    One row per enrolled person. Repeat sightings of somebody already
+    recorded do not create new rows &mdash; they only refresh "last seen".
+  </p>
+</div>
+
+<form method="get" action="/admin/today" class="card">
+  <div class="row">
+    <div>
+      <label for="day">Date</label>
+      <input id="day" type="date" name="day" value="{{ day }}">
+    </div>
+    <button class="btn primary">{{ ui.icon('search', 'sm') }} Show</button>
+    <a class="btn" href="/admin/export.csv?start={{ day }}&amp;end={{ day }}">
+      {{ ui.icon('download', 'sm') }} CSV
+    </a>
   </div>
-  <button class="btn primary">Show</button>
 </form>
 
-<div class="grid four" style="margin-bottom:.75rem">
+<div class="grid four" style="margin-bottom:1rem">
+  <div class="stat info"><div class="n">{{ summary.inside }}</div><div class="k">On site</div></div>
   <div class="stat ok">  <div class="n">{{ summary.present }}</div><div class="k">Present</div></div>
   <div class="stat warn"><div class="n">{{ summary.late }}</div>   <div class="k">Late</div></div>
-  <div class="stat">     <div class="n">{{ summary.half_day }}</div><div class="k">Half day</div></div>
   <div class="stat bad"> <div class="n">{{ summary.absent }}</div> <div class="k">Absent</div></div>
 </div>
 
-<div class="card">
+<div class="card pad0">
   <div class="scroll">
     <table>
-      <tr><th>Name</th><th>In</th><th>Out</th><th>Status</th><th class="right">Hrs</th>
-          {% if user.r in ('hr','admin') %}<th></th>{% endif %}</tr>
+      <thead>
+        <tr>
+          <th>Person</th><th>In</th><th>Out</th><th>Last seen</th>
+          <th>Status</th><th class="right">Hours</th>
+          {% if user.r in ('hr','admin') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
       {% for r in rows %}
       <tr>
         <td>
-          <a href="/admin/people/{{ r.person_id }}"><strong>{{ r.name }}</strong></a>
-          {% if r.emp_code %}<div class="small muted">{{ r.emp_code }}</div>{% endif %}
+          <a href="/admin/people/{{ r.person_id }}" class="person" style="color:inherit">
+            <span class="av c{{ r.name|avatar }}">{{ r.name|initials }}</span>
+            <span style="min-width:0">
+              <span class="nm">{{ r.name }}</span>
+              <span class="mt" style="display:block">
+                {{ r.emp_code or '' }}{% if r.emp_code and r.department %} &middot; {% endif %}{{ r.department or '' }}
+              </span>
+            </span>
+          </a>
         </td>
-        <td class="mono">{{ r.check_in[11:16] if r.check_in else '-' }}</td>
-        <td class="mono">{{ r.check_out[11:16] if r.check_out else '-' }}</td>
+        <td class="mono">{{ r.check_in[11:16] if r.check_in else '—' }}</td>
+        <td class="mono">{{ r.check_out[11:16] if r.check_out else '—' }}</td>
+        <td class="mono small muted">
+          {{ r.last_seen[11:16] if r.last_seen else '—' }}
+          {% if r.sightings > 1 %}
+          <span class="muted" title="{{ r.sightings }} sightings, de-duplicated into the punches above">
+            ({{ r.sightings }}&times;)
+          </span>
+          {% endif %}
+        </td>
         <td>
           <span class="pill {{ r.status }}">{{ status_label[r.status] }}</span>
+          {% if r.inside %}<span class="pill inside">On site</span>{% endif %}
           {% if r.half_day %}<span class="pill half_day">Half</span>{% endif %}
           {% if r.corrected %}<div class="small muted">edited</div>{% endif %}
         </td>
@@ -41,8 +76,9 @@
         <td>
           {% if r.att_id %}
           <details>
-            <summary class="small">Fix</summary>
-            <form method="post" action="/admin/attendance/{{ r.att_id }}/correct">
+            <summary>Fix</summary>
+            <form method="post" action="/admin/attendance/{{ r.att_id }}/correct"
+                  style="min-width:240px">
               <input type="hidden" name="csrf" value="{{ csrf }}">
               <label>Check in</label>
               <input name="check_in" value="{{ r.check_in or '' }}" placeholder="{{ day }} 09:00:00">
@@ -50,7 +86,9 @@
               <input name="check_out" value="{{ r.check_out or '' }}" placeholder="{{ day }} 18:00:00">
               <label>Reason (recorded in the audit log)</label>
               <input name="note" value="{{ r.note or '' }}" required>
-              <div style="margin-top:.6rem"><button class="btn primary block">Save correction</button></div>
+              <div style="margin-top:.75rem">
+                <button class="btn primary block">Save correction</button>
+              </div>
             </form>
           </details>
           {% endif %}
@@ -58,8 +96,9 @@
         {% endif %}
       </tr>
       {% else %}
-      <tr><td colspan="6" class="empty">Nobody is enrolled yet</td></tr>
+      <tr><td colspan="7"><div class="empty">{{ ui.icon('people') }}Nobody is enrolled yet</div></td></tr>
       {% endfor %}
+      </tbody>
     </table>
   </div>
 </div>

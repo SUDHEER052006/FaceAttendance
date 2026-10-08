@@ -12,6 +12,7 @@
 #    ./run.sh status       show what is running
 #    ./run.sh bench        measure real FPS on this board
 #    ./run.sh tune         compute a match threshold from your enrolled faces
+#    ./run.sh test         self-test the attendance + de-duplication logic
 #    ./run.sh harden       24/7 hardening: watchdog, log caps, swap (asks first)
 #    ./run.sh kiosk        install the fullscreen browser autostart
 #
@@ -135,9 +136,13 @@ download_models() {
   if [ ! -s "$ROOT/app/static/offline.jpg" ]; then
     "$PY" - <<'PYEOF' || true
 import cv2, numpy as np, os
-img = np.full((480, 640, 3), 18, dtype=np.uint8)
-cv2.putText(img, "CAMERA OFFLINE", (120, 250), cv2.FONT_HERSHEY_SIMPLEX,
-            1.2, (90, 100, 130), 2, cv2.LINE_AA)
+# Light, to match the dashboard - a black panel reads as a dead screen.
+img = np.full((480, 640, 3), 241, dtype=np.uint8)
+cv2.rectangle(img, (0, 0), (639, 479), (218, 214, 211), 2)
+cv2.putText(img, "Camera offline", (150, 245), cv2.FONT_HERSHEY_SIMPLEX,
+            1.2, (104, 99, 95), 2, cv2.LINE_AA)
+cv2.putText(img, "systemctl status fa-recognizer", (138, 290),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (139, 134, 128), 1, cv2.LINE_AA)
 cv2.imwrite(os.path.join("app", "static", "offline.jpg"), img)
 PYEOF
   fi
@@ -317,6 +322,7 @@ case "${1:-up}" in
   logs)     need_sudo; $SUDO journalctl -u fa-recognizer -u fa-web -f -n 60 ;;
   bench)    "$PY" scripts/benchmark.py ;;
   tune)     "$PY" scripts/tune_threshold.py ;;
+  test)     "$PY" scripts/selftest.py ;;
   harden)   do_harden ;;
   kiosk)    do_kiosk ;;
   *)        sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;

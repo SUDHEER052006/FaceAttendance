@@ -1,92 +1,136 @@
 {% extends "base.html" %}
+{% import "icons.html" as ui %}
 {% block title %}{{ person.name }}{% endblock %}
 {% block body %}
-<h1>{{ person.name }}</h1>
-<p class="muted small">
-  {{ person.emp_code or 'no code' }} &middot; {{ person.department or 'no department' }}
-  {% if not person.active %}&middot; <span class="pill absent">Inactive</span>{% endif %}
-</p>
+
+<div class="page-head" style="display:flex;align-items:center;gap:.875rem">
+  <span class="av lg c{{ person.name|avatar }}">{{ person.name|initials }}</span>
+  <div>
+    <h1 style="margin:0">{{ person.name }}</h1>
+    <p class="muted small" style="margin:0">
+      {{ person.emp_code or 'No employee code' }} &middot;
+      {{ person.department or 'No department' }}
+      {% if not person.active %}&middot; <span class="pill absent">Inactive</span>{% endif %}
+    </p>
+  </div>
+</div>
 
 <div class="grid two">
-  <div class="card">
-    <h3>Face templates ({{ templates_|length }})</h3>
-    {% if templates_ %}
-    <div class="gallery">
-      {% for t in templates_ %}
-        <img src="/media/faces/{{ person.id }}/{{ t.pose }}_{{ loop.index }}.jpg" alt="{{ t.pose }}"
-             title="{{ t.pose }} &middot; sharpness {{ '%.0f'|format(t.quality or 0) }}">
-      {% endfor %}
-    </div>
-    <p class="small muted" style="margin:.6rem 0 0">
-      Poses captured: {{ templates_|map(attribute='pose')|unique|join(', ') }}
-    </p>
-    {% else %}
-      <p class="muted">No face enrolled yet &mdash; this person cannot be recognised.</p>
-    {% endif %}
-
-    {% if user.r in ('hr','admin') %}
-    <form method="post" action="/admin/people/{{ person.id }}/reenroll" style="margin-top:.8rem">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <div class="row">
-        <div>
-          <label for="s">Angles</label>
-          <select id="s" name="samples">
-            <option value="5">5</option><option value="7" selected>7</option><option value="10">10</option>
-          </select>
+  <div>
+    <div class="card">
+      <h3>{{ ui.icon('camera', 'sm') }} Face templates ({{ templates_|length }})</h3>
+      {% if templates_ %}
+        <div class="gallery">
+          {% for t in templates_ %}
+            <img src="/media/faces/{{ person.id }}/{{ t.pose }}_{{ loop.index }}.jpg"
+                 alt="{{ t.pose }}"
+                 title="{{ t.pose }} &middot; sharpness {{ '%.0f'|format(t.quality or 0) }}">
+          {% endfor %}
         </div>
-        <button class="btn primary">Re-capture</button>
-      </div>
-      <div class="check">
-        <input type="checkbox" id="rep" name="replace" value="1">
-        <span>Delete the existing templates first (use this if recognition has become unreliable)</span>
-      </div>
-    </form>
+        <p class="helptext">
+          Poses captured: {{ templates_|map(attribute='pose')|unique|join(', ') }}.
+          These enrollment images are visible here because an operator needs to
+          see whether the capture was clean &mdash; they are never shown on the
+          kiosk or in the attendance feed.
+        </p>
+      {% else %}
+        <div class="banner warn">
+          {{ ui.icon('warning', 'sm') }}
+          <div>No face enrolled yet &mdash; this person cannot be recognised.</div>
+        </div>
+      {% endif %}
 
-    <details style="margin-top:.4rem">
-      <summary class="small">Enroll from photos instead</summary>
-      <form method="post" action="/admin/people/{{ person.id }}/photos" enctype="multipart/form-data">
+      {% if user.r in ('hr','admin') %}
+      <form method="post" action="/admin/people/{{ person.id }}/reenroll"
+            style="margin-top:1rem">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <label for="f">Clear, front-facing photos</label>
-        <input id="f" type="file" name="files" accept="image/*" multiple required>
-        <div style="margin-top:.6rem"><button class="btn block">Upload and enroll</button></div>
+        <div class="row">
+          <div>
+            <label for="s">Angles to capture</label>
+            <select id="s" name="samples">
+              <option value="5">5 — quick</option>
+              <option value="7" selected>7 — recommended</option>
+              <option value="10">10 — best accuracy</option>
+            </select>
+          </div>
+          <button class="btn primary">{{ ui.icon('camera', 'sm') }} Re-capture</button>
+        </div>
+        <div class="check">
+          <input type="checkbox" id="rep" name="replace" value="1">
+          <span>Delete the existing templates first — use this if recognition
+                has become unreliable for this person</span>
+        </div>
       </form>
-    </details>
-    {% endif %}
+
+      <details>
+        <summary>Enroll from photos instead</summary>
+        <form method="post" action="/admin/people/{{ person.id }}/photos"
+              enctype="multipart/form-data">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label for="f">Clear, front-facing photos</label>
+          <input id="f" type="file" name="files" accept="image/*" multiple required>
+          <div style="margin-top:.75rem">
+            <button class="btn block">Upload and enroll</button>
+          </div>
+        </form>
+      </details>
+      {% endif %}
+    </div>
   </div>
 
-  <div class="card">
-    <h3>Last 30 days</h3>
-    <div class="scroll">
-      <table>
-        <tr><th>Day</th><th>In</th><th>Out</th><th>Status</th></tr>
-        {% for h in history %}
-        <tr>
-          <td class="mono small">{{ h.day }}</td>
-          <td class="mono">{{ h.check_in[11:16] if h.check_in else '-' }}</td>
-          <td class="mono">{{ h.check_out[11:16] if h.check_out else '-' }}</td>
-          <td><span class="pill {{ h.status }}">{{ status_label[h.status] }}</span>
-              {% if h.half_day %}<span class="pill half_day">Half</span>{% endif %}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="empty">No records</td></tr>
-        {% endfor %}
-      </table>
+  <div>
+    <div class="card pad0">
+      <h3>{{ ui.icon('today', 'sm') }} Last 30 days</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Day</th><th>In</th><th>Out</th><th>Status</th>
+            {% if proof %}<th>Proof</th>{% endif %}</tr></thead>
+          <tbody>
+          {% for h in history %}
+          <tr>
+            <td class="mono small">{{ h.day }}</td>
+            <td class="mono">{{ h.check_in[11:16] if h.check_in else '—' }}</td>
+            <td class="mono">{{ h.check_out[11:16] if h.check_out else '—' }}</td>
+            <td>
+              <span class="pill {{ h.status }}">{{ status_label[h.status] }}</span>
+              {% if h.half_day %}<span class="pill half_day">Half</span>{% endif %}
+            </td>
+            {% if proof %}
+            <td>
+              {% set shot = proof.get(h.day, {}).get('check_in') %}
+              {% if shot %}
+                <img class="thumb" style="width:32px;height:32px"
+                     src="/media/{{ shot }}" alt="capture at check-in">
+              {% else %}—{% endif %}
+            </td>
+            {% endif %}
+          </tr>
+          {% else %}
+          <tr><td colspan="5"><div class="empty">{{ ui.icon('inbox') }}No records yet</div></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 
 {% if user.r in ('hr','admin') %}
 <div class="card">
-  <h3>Administration</h3>
-  <form method="post" action="/admin/people/{{ person.id }}/active" style="margin-bottom:.8rem">
+  <h3>{{ ui.icon('settings', 'sm') }} Administration</h3>
+  <form method="post" action="/admin/people/{{ person.id }}/active"
+        style="margin-bottom:.75rem">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button class="btn block">{{ 'Reactivate' if not person.active else 'Mark inactive (stops recognition, keeps records)' }}</button>
+    <button class="btn block">
+      {{ 'Reactivate this person' if not person.active
+         else 'Mark inactive — stops recognition, keeps records' }}
+    </button>
   </form>
 
   {% if user.r == 'admin' %}
   <details>
-    <summary class="small" style="color:#ffb4b4">Delete biometric data (DPDP erasure)</summary>
-    <p class="small muted">
+    <summary style="color:var(--red)">Delete biometric data (DPDP erasure)</summary>
+    <p class="helptext">
       Destroys every face template and stored face image for this person and
       removes them from the index. Attendance history is preserved for
       headcount, but they can never be recognised again without re-enrolling.
@@ -97,7 +141,9 @@
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label for="cf">Type the full name to confirm</label>
       <input id="cf" name="confirm" required placeholder="{{ person.name }}">
-      <div style="margin-top:.6rem"><button class="btn danger block">Delete biometric data</button></div>
+      <div style="margin-top:.75rem">
+        <button class="btn danger block">Delete biometric data</button>
+      </div>
     </form>
   </details>
   {% endif %}
